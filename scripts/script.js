@@ -5,8 +5,7 @@ const BASE_URL = 'https://v-content.practicum-team.ru';
 const endpoint = `${BASE_URL}/api/videos?pagination[pageSize]=${cardsOnPage}&`;
 
 /* ЭЛЕМЕНТЫ СТРАНИЦЫ */
-const cardsList = document.querySelector('.content__list');
-const cardsContainer = document.querySelector('.content__list-container');
+const cardsContainer = document.querySelector('.content__list');
 const videoContainer = document.querySelector('.result__video-container');
 const videoElement = document.querySelector('.result__video');
 const form = document.querySelector('form');
@@ -31,27 +30,18 @@ mainMechanics(endpoint);
 // осуществляется поиск ✅
 form.onsubmit = (e) => {
   e.preventDefault();
-
-  cardsList.textContent = '';
-  const buttonInDOM = cardsContainer.querySelector('.more-button');
-  if (buttonInDOM) {
-    buttonInDOM.remove();
-  }
-
+  cardsContainer.textContent = '';
   [...videoContainer.children].forEach((el) => {
     el.className === 'error' && el.remove();
   });
-
   showPreloader(preloaderTmp, videoContainer);
   showPreloader(preloaderTmp, cardsContainer);
-
   const formData = serializeFormData(form);
   const requestUrl = generateFilterRequest(
     endpoint,
     formData.city,
     formData.timeArray
   );
-
   mainMechanics(requestUrl);
 };
 
@@ -59,7 +49,11 @@ form.onsubmit = (e) => {
 
 async function mainMechanics(endpoint) {
   try {
-    const data = await (await fetch(endpoint)).json();
+    const response = await fetch(endpoint);
+    if (!response.ok) {
+      throw new Error(`request-failed-${response.status}`);
+    }
+    const data = await response.json();
     cardsOnPageState = data.results;
 
     if (!data?.results?.[0]) {
@@ -70,7 +64,7 @@ async function mainMechanics(endpoint) {
       baseUrl: BASE_URL,
       dataArray: data.results,
       cardTmp,
-      container: cardsList,
+      container: cardsContainer,
     });
 
     setVideo({
@@ -86,10 +80,6 @@ async function mainMechanics(endpoint) {
     await delay(preloaderWaitindTime);
     removePreloader(videoContainer, '.preloader');
     removePreloader(cardsContainer, '.preloader');
-
-    // Добавляем класс для стилизации скроллбара
-    cardsContainer.classList.add('custom-scrollbar');
-
     chooseCurrentVideo({
       baseUrl: BASE_URL,
       videoData: cardsOnPageState,
@@ -101,7 +91,7 @@ async function mainMechanics(endpoint) {
     showMoreCards({
       dataArray: data,
       buttonTemplate: moreButtonTmp,
-      cardsList,
+      cardsContainer,
       buttonSelector: '.more-button',
       initialEndpoint: endpoint,
       baseUrl: BASE_URL,
@@ -199,11 +189,11 @@ function serializeFormData(form) {
 // Генерирует строку с фильтрами запросов в API в зависимости от данных из формы ✅
 function generateFilterRequest(endpoint, city, timeArray) {
   if (city) {
-    endpoint += `filters[city][$containsi]=${city}&`;
+    endpoint += `filters[city][$containsi]=${encodeURIComponent(city)}&`;
   }
   if (timeArray) {
     timeArray.forEach((timeslot) => {
-      endpoint += `filters[time_of_day][$eqi]=${timeslot}&`;
+      endpoint += `filters[time_of_day][$eqi]=${encodeURIComponent(timeslot)}&`;
     });
   }
   console.log('Сгенерировал строку адреса запроса в API из данных формы');
@@ -259,7 +249,7 @@ function showError(container, errorTemplate, errorMessage) {
 function showMoreCards({
   dataArray,
   buttonTemplate,
-  cardsList,
+  cardsContainer,
   buttonSelector,
   initialEndpoint,
   baseUrl,
@@ -276,14 +266,24 @@ function showMoreCards({
     let currentPage = dataArray.pagination.page;
     let urlToFetch = `${initialEndpoint}pagination[page]=${(currentPage += 1)}&`;
     try {
-      let data = await (await fetch(urlToFetch)).json();
+      let data;
+      try {
+        const response = await fetch(urlToFetch);
+        if (!response.ok) {
+          throw new Error(`request-failed-${response.status}`);
+        }
+        data = await response.json();
+      } catch (error) {
+        console.error('Не удалось загрузить следующую страницу видео', error);
+        return;
+      }
       buttonInDOM.remove();
       cardsOnPageState = cardsOnPageState.concat(data.results);
       appendCards({
         baseUrl,
         dataArray: data.results,
         cardTmp,
-        container: cardsList,
+        container: cardsContainer,
       });
       chooseCurrentVideo({
         baseUrl: BASE_URL,
@@ -295,7 +295,7 @@ function showMoreCards({
       showMoreCards({
         dataArray: data,
         buttonTemplate,
-        cardsList,
+        cardsContainer,
         buttonSelector,
         initialEndpoint,
         baseUrl,
